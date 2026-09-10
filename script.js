@@ -16,9 +16,14 @@ Constraint Guidelines:
 3. Recommend exactly 6 build items, 3 emblem talents, and 1 battle spell.
 4. Item names MUST match standard MLBB nomenclature (e.g., "Demon Hunter Sword", "Tough Boots", "Corrosion Scythe", "Golden Staff", "Dominance Ice", "Athena's Shield").
 5. Reasons must be ultra-concise (under 8 words).
+6. Pick 1 hero from our team who is MOST CRITICAL to winning/defeating the enemy team composition and explain why in 1 sentence.
 
 Return strictly JSON format adhering to this structure:
 {
+  "key_hero": {
+    "name": "Hero Name",
+    "reason": "Why this hero is most useful against the enemy team."
+  },
   "team_analysis": {
     "synergy_notes": "Short synergy summary.",
     "team_gaps": "Main team gaps.",
@@ -38,12 +43,8 @@ Return strictly JSON format adhering to this structure:
 }
 `;
 
-/**
- * Builds direct, clean image paths for MLBB items while using referrerpolicy to bypass CDN hotlink blocking.
- */
 function getItemImageCandidates(itemName) {
   if (!itemName) return [];
-
   const cleanName = itemName.trim();
   const formattedName = cleanName.replace(/\s+/g, '_').replace(/'/g, '%27');
 
@@ -52,6 +53,22 @@ function getItemImageCandidates(itemName) {
     `https://mobile-legends.fandom.com/wiki/Special:FilePath/${formattedName}.jpg`,
     `./assets/items/${formattedName.toLowerCase()}.png`
   ];
+}
+
+function getAssetImageUrl(name, type) {
+  if (!name) return '';
+  const formattedName = name.trim().replace(/\s+/g, '_').replace(/'/g, '%27');
+  
+  if (type === 'spell') {
+    return `https://mobile-legends.fandom.com/wiki/Special:FilePath/${formattedName}.png`;
+  }
+  if (type === 'talent') {
+    return `https://mobile-legends.fandom.com/wiki/Special:FilePath/${formattedName}_Talent.png`;
+  }
+  if (type === 'emblem') {
+    return `https://mobile-legends.fandom.com/wiki/Special:FilePath/${formattedName}.png`;
+  }
+  return `https://mobile-legends.fandom.com/wiki/Special:FilePath/${formattedName}.png`;
 }
 
 function processAndResizeImage(file, maxDimension = 1280) {
@@ -119,7 +136,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
 
   try {
     const contents = [{
-      parts: [{ text: `Playing Hero: ${hero}. Analyze team synergy, identify counters based ONLY on the actual heroes in the image, and generate optimal item build.` }]
+      parts: [{ text: `Playing Hero: ${hero}. Analyze team synergy, identify counters based ONLY on the actual heroes in the image, select key MVP team hero, and generate optimal build.` }]
     }];
 
     if (fileInput && fileInput.files.length > 0) {
@@ -127,7 +144,6 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       contents[0].parts.push(optimizedImage);
     }
 
-    // Exclusively targeting Gemini 3.6-flash model
     const modelsToTry = ['gemini-3.6-flash'];
     let data = null;
     let lastError = null;
@@ -195,8 +211,32 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
 
 function renderResults(data) {
   const outputDiv = document.getElementById('output');
+  let html = '';
 
-  let html = `
+  // Key Team MVP / Counter Hero Highlight
+  if (data.key_hero?.name) {
+    const heroImg = `https://mobile-legends.fandom.com/wiki/Special:FilePath/${data.key_hero.name.replace(/\s+/g, '_')}.png`;
+    
+    html += `
+      <div style="background: linear-gradient(135deg, #0284c7 0%, #0f172a 100%); padding: 14px; border-radius: 8px; margin-bottom: 16px; border: 1px solid #38bdf8;">
+        <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #a5f3fc; font-weight: bold; margin-bottom: 6px;">
+          ⭐ Key Team MVP / Counter Hero
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 44px; height: 44px; border-radius: 50%; overflow: hidden; background: #1e293b; border: 2px solid #38bdf8; flex-shrink: 0;">
+            <img src="${heroImg}" alt="${data.key_hero.name}" loading="lazy" referrerpolicy="no-referrer" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerHTML='👑';">
+          </div>
+          <div>
+            <strong style="color: #ffffff; font-size: 14px;">${data.key_hero.name}</strong>
+            <div style="font-size: 12px; color: #e0f2fe; margin-top: 2px; line-height: 1.3;">${data.key_hero.reason}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Strategic Analysis Card
+  html += `
     <div style="background: #0f172a; padding: 14px; border-radius: 8px; margin-bottom: 16px;">
       <h4 style="margin-top:0; color: #38bdf8;">Strategic Analysis</h4>
       <p style="color: #cbd5e1; font-size: 13px; margin: 4px 0;"><strong>🤝 Synergy:</strong> ${data.team_analysis?.synergy_notes || 'Complete'}</p>
@@ -232,28 +272,39 @@ function renderResults(data) {
     });
   }
 
+  const emblemImg = getAssetImageUrl(data.emblem?.name, 'emblem');
+
   html += `</div>
     <h4 style="color: #38bdf8;">Emblem & Talents</h4>
     <div style="background: #0f172a; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
-      <strong style="color: #38bdf8; font-size: 13px;">${data.emblem?.name || 'Custom Emblem'}</strong>
-      <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+        <div style="width: 24px; height: 24px; border-radius: 4px; overflow: hidden; background: #1e293b; display: flex; align-items: center; justify-content: center;">
+          <img src="${emblemImg}" alt="Emblem" loading="lazy" referrerpolicy="no-referrer" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.onerror=null; this.parentElement.innerHTML='🌀';">
+        </div>
+        <strong style="color: #38bdf8; font-size: 13px;">${data.emblem?.name || 'Custom Emblem'}</strong>
+      </div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap;">
   `;
 
   if (Array.isArray(data.emblem?.talents)) {
     data.emblem.talents.forEach(talent => {
+      const talentImg = getAssetImageUrl(talent, 'talent');
       html += `
-        <span style="background: #1e293b; color: #e2e8f0; border: 1px solid #38bdf8; font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 500; display: inline-flex; align-items: center;">
-          ⚡ ${talent}
+        <span style="background: #1e293b; color: #e2e8f0; border: 1px solid #38bdf8; font-size: 11px; padding: 4px 8px; border-radius: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;">
+          <img src="${talentImg}" alt="${talent}" loading="lazy" referrerpolicy="no-referrer" style="width: 16px; height: 16px; object-fit: contain;" onerror="this.onerror=null; this.parentElement.innerHTML='⚡ ${talent}';">
+          ${talent}
         </span>
       `;
     });
   }
 
+  const spellImg = getAssetImageUrl(data.battle_spell?.name, 'spell');
+
   html += `</div></div>
     <h4 style="color: #38bdf8;">Battle Spell</h4>
     <div style="background: #0f172a; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 12px;">
-      <div style="background: #0284c7; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px;">
-        ✨
+      <div style="background: #0284c7; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #38bdf8; flex-shrink: 0;">
+        <img src="${spellImg}" alt="${data.battle_spell?.name || 'Spell'}" loading="lazy" referrerpolicy="no-referrer" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerHTML='✨';">
       </div>
       <div>
         <strong style="color: #f8fafc; font-size: 13px;">${data.battle_spell?.name || 'Execute'}</strong>
