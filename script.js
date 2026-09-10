@@ -6,7 +6,6 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// Enforce strict output constraints in the system prompt
 const SYSTEM_PROMPT = `
 You are an expert Mobile Legends: Bang Bang (MLBB) Draft Analyzer.
 Analyze the 5v5 draft from the provided image or text input.
@@ -68,7 +67,6 @@ const ITEM_COLS = 6;
 const TALENT_ICON_SIZE = 24;
 const TALENT_COLS = 6;
 
-// Image Optimization: Downscales screenshots proportionally while preserving aspect ratio and preventing black renders
 function processAndResizeImage(file, maxDimension = 1280) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -93,10 +91,8 @@ function processAndResizeImage(file, maxDimension = 1280) {
         canvas.height = height;
         const ctx = canvas.getContext('2d');
 
-        // Fill white background to prevent black canvas export on transparent formats
         ctx.fillStyle = '#FFFFFF';
         ctx.fillRect(0, 0, width, height);
-
         ctx.drawImage(img, 0, 0, width, height);
 
         const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
@@ -130,7 +126,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
   }
 
   localStorage.setItem('mlbb_gemini_key', apiKey);
-  resultCard.style.display = 'block';
+  if (resultCard) resultCard.style.display = 'block';
   outputDiv.innerHTML = '<p style="color: #38bdf8;">Optimizing screenshot & analyzing draft...</p>';
 
   try {
@@ -138,12 +134,13 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       parts: [{ text: `Playing Hero: ${hero}. Analyze team synergy, identify counters based ONLY on the actual heroes in the image, and generate optimal item build.` }]
     }];
 
-    if (fileInput.files.length > 0) {
+    if (fileInput && fileInput.files.length > 0) {
       const optimizedImage = await processAndResizeImage(fileInput.files[0], 1280);
       contents[0].parts.push(optimizedImage);
     }
 
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+    // Updated active model identifiers
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash'];
     let data = null;
     let lastError = null;
 
@@ -193,10 +190,15 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     }
 
     if (!data) {
-      throw new Error(lastError ? (lastError.message || JSON.stringify(lastError)) : "Service unavailable.");
+      const msg = lastError?.error?.message || lastError?.message || JSON.stringify(lastError) || "Service unavailable.";
+      throw new Error(msg);
     }
 
-    const rawText = data.candidates[0].content.parts[0].text;
+    let rawText = data.candidates[0].content.parts[0].text;
+    
+    // Strip markdown formatting if present
+    rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+    
     const result = JSON.parse(rawText);
     renderResults(result);
 
@@ -220,79 +222,83 @@ function renderResults(data) {
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 20px;">
   `;
 
-  data.recommended_build.forEach(item => {
-    const cleanName = item.name.toLowerCase().trim();
-    const coords = ITEM_SPRITE_MAP[cleanName];
+  if (Array.isArray(data.recommended_build)) {
+    data.recommended_build.forEach(item => {
+      const cleanName = item.name.toLowerCase().trim();
+      const coords = ITEM_SPRITE_MAP[cleanName];
 
-    let iconHtml = '';
-    if (coords) {
-      const xOffset = -(coords.col * ITEM_ICON_SIZE);
-      const yOffset = -(coords.row * ITEM_ICON_SIZE);
+      let iconHtml = '';
+      if (coords) {
+        const xOffset = -(coords.col * ITEM_ICON_SIZE);
+        const yOffset = -(coords.row * ITEM_ICON_SIZE);
 
-      iconHtml = `
-        <div style="
-          width: ${ITEM_ICON_SIZE}px; 
-          height: ${ITEM_ICON_SIZE}px; 
-          margin: 0 auto; 
-          border-radius: 50%; 
-          background-image: url('./assets/items.jpg'); 
-          background-position: ${xOffset}px ${yOffset}px; 
-          background-size: ${ITEM_COLS * ITEM_ICON_SIZE}px auto;
-          background-repeat: no-repeat;">
-        </div>`;
-    } else {
-      iconHtml = `
-        <div style="width: 38px; height: 38px; margin: 0 auto; background: #0284c7; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px;">
-          🛡️
-        </div>`;
-    }
+        iconHtml = `
+          <div style="
+            width: ${ITEM_ICON_SIZE}px; 
+            height: ${ITEM_ICON_SIZE}px; 
+            margin: 0 auto; 
+            border-radius: 50%; 
+            background-image: url('./assets/items.jpg'); 
+            background-position: ${xOffset}px ${yOffset}px; 
+            background-size: ${ITEM_COLS * ITEM_ICON_SIZE}px auto;
+            background-repeat: no-repeat;">
+          </div>`;
+      } else {
+        iconHtml = `
+          <div style="width: 38px; height: 38px; margin: 0 auto; background: #0284c7; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px;">
+            🛡️
+          </div>`;
+      }
 
-    html += `
-      <div style="background: #0f172a; padding: 10px; border-radius: 8px; text-align: center;">
-        ${iconHtml}
-        <div style="font-weight: bold; font-size: 11px; margin: 6px 0 2px 0; color: #f8fafc;">${item.name}</div>
-        <div style="font-size: 10px; color: #94a3b8; line-height: 1.2;">${item.reason}</div>
-      </div>
-    `;
-  });
+      html += `
+        <div style="background: #0f172a; padding: 10px; border-radius: 8px; text-align: center;">
+          ${iconHtml}
+          <div style="font-weight: bold; font-size: 11px; margin: 6px 0 2px 0; color: #f8fafc;">${item.name}</div>
+          <div style="font-size: 10px; color: #94a3b8; line-height: 1.2;">${item.reason}</div>
+        </div>
+      `;
+    });
+  }
 
   html += `</div>
     <h4 style="color: #38bdf8;">Emblem & Talents</h4>
     <div style="background: #0f172a; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
-      <strong style="color: #38bdf8; font-size: 13px;">${data.emblem.name}</strong>
+      <strong style="color: #38bdf8; font-size: 13px;">${data.emblem?.name || 'Custom Emblem'}</strong>
       <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
   `;
 
-  data.emblem.talents.forEach(talent => {
-    const cleanTalent = talent.toLowerCase().trim();
-    const coords = TALENT_SPRITE_MAP[cleanTalent];
+  if (Array.isArray(data.emblem?.talents)) {
+    data.emblem.talents.forEach(talent => {
+      const cleanTalent = talent.toLowerCase().trim();
+      const coords = TALENT_SPRITE_MAP[cleanTalent];
 
-    let talentIconHtml = '⚡ ';
-    if (coords) {
-      const xOffset = -(coords.col * TALENT_ICON_SIZE);
-      const yOffset = -(coords.row * TALENT_ICON_SIZE);
+      let talentIconHtml = '⚡ ';
+      if (coords) {
+        const xOffset = -(coords.col * TALENT_ICON_SIZE);
+        const yOffset = -(coords.row * TALENT_ICON_SIZE);
 
-      talentIconHtml = `
-        <span style="
-          display: inline-block;
-          width: ${TALENT_ICON_SIZE}px; 
-          height: ${TALENT_ICON_SIZE}px; 
-          vertical-align: middle;
-          margin-right: 4px;
-          border-radius: 50%; 
-          background-image: url('./assets/talents.jpg'); 
-          background-position: ${xOffset}px ${yOffset}px; 
-          background-size: ${TALENT_COLS * TALENT_ICON_SIZE}px auto;
-          background-repeat: no-repeat;">
-        </span>`;
-    }
+        talentIconHtml = `
+          <span style="
+            display: inline-block;
+            width: ${TALENT_ICON_SIZE}px; 
+            height: ${TALENT_ICON_SIZE}px; 
+            vertical-align: middle;
+            margin-right: 4px;
+            border-radius: 50%; 
+            background-image: url('./assets/talents.jpg'); 
+            background-position: ${xOffset}px ${yOffset}px; 
+            background-size: ${TALENT_COLS * TALENT_ICON_SIZE}px auto;
+            background-repeat: no-repeat;">
+          </span>`;
+      }
 
-    html += `
-      <span style="background: #1e293b; color: #e2e8f0; border: 1px solid #38bdf8; font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 500; display: inline-flex; align-items: center;">
-        ${talentIconHtml}${talent}
-      </span>
-    `;
-  });
+      html += `
+        <span style="background: #1e293b; color: #e2e8f0; border: 1px solid #38bdf8; font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 500; display: inline-flex; align-items: center;">
+          ${talentIconHtml}${talent}
+        </span>
+      `;
+    });
+  }
 
   html += `</div></div>
     <h4 style="color: #38bdf8;">Battle Spell</h4>
@@ -301,8 +307,8 @@ function renderResults(data) {
         ✨
       </div>
       <div>
-        <strong style="color: #f8fafc; font-size: 13px;">${data.battle_spell.name}</strong>
-        <div style="font-size: 11px; color: #94a3b8;">${data.battle_spell.reason}</div>
+        <strong style="color: #f8fafc; font-size: 13px;">${data.battle_spell?.name || 'Execute'}</strong>
+        <div style="font-size: 11px; color: #94a3b8;">${data.battle_spell?.reason || ''}</div>
       </div>
     </div>
   `;
