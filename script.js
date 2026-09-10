@@ -139,8 +139,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       contents[0].parts.push(optimizedImage);
     }
 
-    // Updated active model identifiers
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-2.0-flash'];
+    const modelsToTry = ['gemini-3.6-flash'];
     let data = null;
     let lastError = null;
 
@@ -196,7 +195,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
 
     let rawText = data.candidates[0].content.parts[0].text;
     
-    // Strip markdown formatting if present
+    // Clean code block ticks before JSON parsing
     rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
     
     const result = JSON.parse(rawText);
