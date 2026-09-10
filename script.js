@@ -55,10 +55,9 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
   }
 
   resultCard.style.display = 'block';
-  outputDiv.innerText = 'Analyzing draft screenshot with Gemini 2.5 Flash...';
+  outputDiv.innerText = 'Analyzing draft screenshot with Gemini 3.6 Flash...';
 
   try {
-    // Build content array (Text prompt + image if uploaded)
     const contents = [
       {
         parts: [
@@ -72,8 +71,8 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       contents[0].parts.push(imagePart);
     }
 
-    // Direct REST call to Gemini 2.5 Flash endpoint
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    // Updated URL to gemini-3.6-flash
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -94,7 +93,6 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       throw new Error(JSON.stringify(data, null, 2));
     }
 
-    // Extract generated text response
     const analysisText = data.candidates[0].content.parts[0].text;
     outputDiv.innerText = analysisText;
 
