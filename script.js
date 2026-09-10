@@ -1,50 +1,51 @@
-// 1. Auto-load saved API Key
+// 1. Auto-load saved API Key on page load
 window.addEventListener('DOMContentLoaded', () => {
   const savedKey = localStorage.getItem('mlbb_gemini_key');
   if (savedKey) {
     const apiKeyInput = document.getElementById('apiKey');
-    if (apiKeyInput) apiKeyInput.value = savedKey;
+    if (apiKeyInput) {
+      apiKeyInput.value = savedKey;
+    }
   }
 });
 
-// 2. Enhanced System Prompt (Team Synergy + Counter Strategy)
+// 2. Draft & Team Synergy System Prompt
 const SYSTEM_PROMPT = `
 You are an expert Mobile Legends: Bang Bang (MLBB) Draft Analyzer.
-Analyze the 5v5 enemy and allied draft from the image or text input.
+Analyze the 5v5 draft from the provided image or text input.
 
 Tasks:
-1. Identify enemy team composition & main threats.
-2. Identify allied team synergy & main weaknesses/gaps (e.g., lack of CC, squishy frontline, heavy magic damage).
-3. Provide optimal item build, emblems, and battle spell to fix your team's weakness and counter enemies.
+1. Identify team synergy, team gaps/weaknesses, and main enemy threats.
+2. Recommend an optimal counter-build path, emblems, and battle spell.
+3. Keep reasons short (under 10 words per item/spell).
 
 Respond ONLY in valid JSON format:
 {
-  "allies_detected": ["Hero1", "Hero2", "Hero3", "Hero4"],
-  "enemies_detected": ["Hero1", "Hero2", "Hero3", "Hero4", "Hero5"],
   "team_analysis": {
-    "synergy_notes": "How your hero works with allies",
-    "team_gaps": "What your team lacks (e.g. no anti-regen, weak frontline)",
-    "enemy_threats": "Main enemy dangers to watch out for"
+    "synergy_notes": "Short 1-2 sentence team synergy overview.",
+    "team_gaps": "Main team weaknesses or gaps (e.g., lack of anti-regen, squishy frontline).",
+    "enemy_threats": "Key enemy threats to watch out for."
   },
   "recommended_build": [
-    {"name": "Demon Hunter Sword", "reason": "Counter high HP tank"},
+    {"name": "Demon Hunter Sword", "reason": "Counter high HP tanks"},
     {"name": "Tough Boots", "reason": "Reduce CC duration"},
-    {"name": "Corrosion Scythe", "reason": "Slow enemies"},
-    {"name": "Golden Staff", "reason": "Boost attack speed"},
+    {"name": "Corrosion Scythe", "reason": "Slow enemy movement"},
+    {"name": "Golden Staff", "reason": "Trigger item passives"},
     {"name": "Wind of Nature", "reason": "Immunity to physical burst"},
-    {"name": "Immortality", "reason": "Late game survival"}
+    {"name": "Immortality", "reason": "Late game revive"}
   ],
   "emblem": {
-    "name": "Custom Assassin Emblem",
-    "talents": ["Rupture", "Master Assassin", "Lethal Ignition"]
+    "name": "Custom Support Emblem",
+    "talents": ["Agility", "Pull Yourself Together", "Focusing Mark"]
   },
   "battle_spell": {
     "name": "Flicker",
-    "reason": "Mobility & positioning"
+    "reason": "Mobility & quick escape"
   }
 }
 `;
 
+// 3. Image conversion helper
 function fileToGenerativePart(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -59,6 +60,7 @@ function fileToGenerativePart(file) {
   });
 }
 
+// 4. Submit & Analyze Button Handler
 document.getElementById('analyzeBtn').addEventListener('click', async () => {
   const apiKey = document.getElementById('apiKey').value.trim();
   const hero = document.getElementById('heroInput').value.trim();
@@ -67,17 +69,19 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
   const resultCard = document.getElementById('resultCard');
 
   if (!apiKey || !hero) {
-    alert('Please enter your API Key and Hero.');
+    alert('Please enter your API Key and Hero name.');
     return;
   }
 
+  // Save key to local storage permanently
   localStorage.setItem('mlbb_gemini_key', apiKey);
+
   resultCard.style.display = 'block';
-  outputDiv.innerHTML = '<p>Analyzing draft & team composition...</p>';
+  outputDiv.innerHTML = '<p style="color: #38bdf8;">Analyzing draft & team composition...</p>';
 
   try {
     const contents = [{
-      parts: [{ text: `I am playing ${hero}. Read draft image, identify all 10 heroes, analyze team weaknesses and give optimal counter build.` }]
+      parts: [{ text: `I am playing ${hero}. Read draft image, analyze team synergy/gaps, and give builds.` }]
     }];
 
     if (fileInput.files.length > 0) {
@@ -95,7 +99,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
         contents: contents,
         generationConfig: {
           responseMimeType: "application/json",
-          maxOutputTokens: 1000
+          maxOutputTokens: 800
         }
       })
     });
@@ -107,70 +111,63 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     renderResults(result);
 
   } catch (error) {
-    outputDiv.innerText = `Error: ${error.message}`;
+    outputDiv.innerHTML = `<p style="color: #ef4444;">Error: ${error.message}</p>`;
   }
 });
 
-// Helper function to get clean UI image icons
-function getItemIcon(itemName) {
-  const formatted = encodeURIComponent(itemName.replace(/\s+/g, '_'));
-  return `https://akm-img-a-in.tos-cn-beijing.volces.com/mobilelegends/item/${formatted}.png`;
-}
-
+// 5. Render JSON response with styled badges (fixes broken image issue)
 function renderResults(data) {
   const outputDiv = document.getElementById('output');
 
   let html = `
-    <!-- Team & Draft Analysis Section -->
+    <!-- Strategic Analysis Card -->
     <div style="background: #0f172a; padding: 14px; border-radius: 8px; margin-bottom: 16px;">
-      <h4 style="margin-top:0; color: #38bdf8;">Draft & Team Analysis</h4>
-      <p style="font-size: 13px; margin: 4px 0;"><strong>🤝 Team Synergy:</strong> ${data.team_analysis.synergy_notes}</p>
-      <p style="font-size: 13px; margin: 4px 0;"><strong>⚠️ Team Gaps/Weakness:</strong> ${data.team_analysis.team_gaps}</p>
-      <p style="font-size: 13px; margin: 4px 0;"><strong>🎯 Main Enemy Threats:</strong> ${data.team_analysis.enemy_threats}</p>
+      <h4 style="margin-top:0; color: #38bdf8;">Strategic Analysis</h4>
+      <p style="color: #cbd5e1; font-size: 13px; margin: 4px 0;"><strong>🤝 Synergy:</strong> ${data.team_analysis?.synergy_notes || 'Analysis complete.'}</p>
+      ${data.team_analysis?.team_gaps ? `<p style="color: #f87171; font-size: 13px; margin: 4px 0;"><strong>⚠️ Team Gaps:</strong> ${data.team_analysis.team_gaps}</p>` : ''}
+      ${data.team_analysis?.enemy_threats ? `<p style="color: #fbbf24; font-size: 13px; margin: 4px 0;"><strong>🎯 Main Threats:</strong> ${data.team_analysis.enemy_threats}</p>` : ''}
     </div>
 
-    <!-- Recommended Build Section -->
+    <!-- Recommended Build Path Grid -->
     <h4 style="color: #38bdf8;">Recommended Build Path</h4>
-    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 10px; margin-bottom: 20px;">
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 20px;">
   `;
 
   data.recommended_build.forEach(item => {
-    // Uses fallback UI avatar if item image fails to load
     html += `
-      <div style="background: #0f172a; padding: 8px; border-radius: 8px; text-align: center;">
-        <img src="https://img.icons8.com/color/48/sword.png" 
-             alt="${item.name}" 
-             style="width: 40px; height: 40px; border-radius: 50%; background: #1e293b; padding: 4px;"
-             onerror="this.src='https://img.icons8.com/color/48/shield.png';">
-        <div style="font-weight: bold; font-size: 11px; margin: 4px 0; color: #f8fafc;">${item.name}</div>
-        <div style="font-size: 10px; color: #94a3b8;">${item.reason}</div>
+      <div style="background: #0f172a; padding: 10px; border-radius: 8px; text-align: center;">
+        <div style="width: 38px; height: 38px; margin: 0 auto; background: #0284c7; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px;">
+          🛡️
+        </div>
+        <div style="font-weight: bold; font-size: 11px; margin: 6px 0 2px 0; color: #f8fafc;">${item.name}</div>
+        <div style="font-size: 10px; color: #94a3b8; line-height: 1.2;">${item.reason}</div>
       </div>
     `;
   });
 
   html += `</div>
-    <!-- Emblem & Talents Section -->
+    <!-- Emblem & Talents Badges -->
     <h4 style="color: #38bdf8;">Emblem & Talents</h4>
     <div style="background: #0f172a; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
-      <strong style="color: #f8fafc; font-size: 13px;">${data.emblem.name}</strong>
-      <div style="display: flex; gap: 12px; margin-top: 8px;">
+      <strong style="color: #38bdf8; font-size: 13px;">${data.emblem.name}</strong>
+      <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
   `;
 
   data.emblem.talents.forEach(talent => {
     html += `
-      <div style="text-align: center;">
-        <span style="background: #0ea5e9; color: #fff; font-size: 10px; padding: 3px 8px; border-radius: 12px; font-weight: bold;">
-          ${talent}
-        </span>
-      </div>
+      <span style="background: #1e293b; color: #e2e8f0; border: 1px solid #38bdf8; font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 500;">
+        ⚡ ${talent}
+      </span>
     `;
   });
 
   html += `</div></div>
-    <!-- Battle Spell Section -->
+    <!-- Battle Spell Card -->
     <h4 style="color: #38bdf8;">Battle Spell</h4>
     <div style="background: #0f172a; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 12px;">
-      <div style="background: #0284c7; padding: 8px; border-radius: 50%; width: 24px; height: 24px; text-align: center; font-weight: bold;">⚡</div>
+      <div style="background: #0284c7; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px;">
+        ✨
+      </div>
       <div>
         <strong style="color: #f8fafc; font-size: 13px;">${data.battle_spell.name}</strong>
         <div style="font-size: 11px; color: #94a3b8;">${data.battle_spell.reason}</div>
