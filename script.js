@@ -14,7 +14,7 @@ Constraint Guidelines:
 1. Carefully identify the exact 5 allied heroes and 5 enemy heroes shown in the draft screen before analyzing. Do NOT guess or hallucinate heroes that are not present.
 2. Identify team synergy, team gaps, and main enemy threats concisely.
 3. Recommend exactly 6 build items, 3 emblem talents, and 1 battle spell.
-4. Item names MUST match standard MLBB nomenclature (e.g., "Demon Hunter Sword", "Tough Boots", "Corrosion Scythe", "Windtalker").
+4. Item names MUST match standard MLBB nomenclature (e.g., "Demon Hunter Sword", "Tough Boots", "Corrosion Scythe", "Golden Staff", "Dominance Ice", "Athena's Shield").
 5. Reasons must be ultra-concise (under 8 words).
 
 Return strictly JSON format adhering to this structure:
@@ -37,6 +37,40 @@ Return strictly JSON format adhering to this structure:
   }
 }
 `;
+
+/**
+ * METHOD A: MediaWiki API via CORS Proxy
+ * Queries Fandom's API dynamically to resolve the exact live CDN image URL.
+ */
+async function getMLBBItemImageUrl(itemName) {
+  if (!itemName) return null;
+
+  const formattedName = itemName.trim().replace(/\s+/g, '_');
+  const fileTitle = `File:${formattedName}.png`;
+  const targetApiUrl = `https://mobile-legends.fandom.com/api.php?action=query&titles=${encodeURIComponent(fileTitle)}&prop=imageinfo&iiprop=url&format=json`;
+  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetApiUrl)}`;
+
+  try {
+    const response = await fetch(proxyUrl);
+    if (!response.ok) return null;
+
+    const proxyData = await response.json();
+    const data = JSON.parse(proxyData.contents);
+
+    const pages = data.query?.pages;
+    if (!pages) return null;
+
+    const pageId = Object.keys(pages)[0];
+
+    if (pageId && pageId !== "-1" && pages[pageId]?.imageinfo?.[0]?.url) {
+      return pages[pageId].imageinfo[0].url;
+    }
+  } catch (error) {
+    console.error(`Failed Method A API retrieval for ${itemName}:`, error);
+  }
+
+  return null;
+}
 
 function processAndResizeImage(file, maxDimension = 1280) {
   return new Promise((resolve, reject) => {
@@ -82,29 +116,6 @@ function processAndResizeImage(file, maxDimension = 1280) {
   });
 }
 
-// Dynamically query Fandom MediaWiki API for CDN image target
-async function fetchFandomImageUrl(itemName) {
-  const formattedName = itemName.trim().replace(/\s+/g, '_');
-  const fileName = `File:${formattedName}.png`;
-  const apiUrl = `https://mobile-legends.fandom.com/api.php?action=query&titles=${encodeURIComponent(fileName)}&prop=imageinfo&iiprop=url&format=json&origin=*`;
-
-  try {
-    const res = await fetch(apiUrl);
-    const data = await res.json();
-    const pages = data.query?.pages;
-    if (!pages) return null;
-    
-    const pageId = Object.keys(pages)[0];
-
-    if (pageId !== "-1" && pages[pageId].imageinfo?.[0]?.url) {
-      return pages[pageId].imageinfo[0].url;
-    }
-  } catch (err) {
-    console.error("Failed image resolution for:", itemName, err);
-  }
-  return null;
-}
-
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 document.getElementById('analyzeBtn').addEventListener('click', async () => {
@@ -134,7 +145,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       contents[0].parts.push(optimizedImage);
     }
 
-    // Exclusively targeting 3.6 model series
+    // Exclusively targeting Gemini 3.6-flash model
     const modelsToTry = ['gemini-3.6-flash'];
     let data = null;
     let lastError = null;
@@ -216,21 +227,22 @@ async function renderResults(data) {
   `;
 
   if (Array.isArray(data.recommended_build)) {
-    const buildItemsWithUrls = await Promise.all(
+    // Dynamically fetch live Method A Fandom CDN links in parallel
+    const buildWithImages = await Promise.all(
       data.recommended_build.map(async (item) => {
-        const url = await fetchFandomImageUrl(item.name);
-        return { ...item, url };
+        const liveUrl = await getMLBBItemImageUrl(item.name);
+        return { ...item, liveUrl };
       })
     );
 
-    buildItemsWithUrls.forEach(item => {
-      const imgContent = item.url 
-        ? `<img src="${item.url}" alt="${item.name}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerHTML='🛡️';">`
+    buildWithImages.forEach(item => {
+      const imgContent = item.liveUrl
+        ? `<img src="${item.liveUrl}" alt="${item.name}" loading="lazy" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerHTML='🛡️';">`
         : `🛡️`;
 
       html += `
         <div style="background: #0f172a; padding: 10px; border-radius: 8px; text-align: center;">
-          <div style="width: 44px; height: 44px; margin: 0 auto; border-radius: 8px; overflow: hidden; background: #1e293b; display: flex; align-items: center; justify-content: center; border: 1px solid #38bdf8;">
+          <div style="width: 48px; height: 48px; margin: 0 auto; border-radius: 8px; overflow: hidden; background: #1e293b; display: flex; align-items: center; justify-content: center; border: 1px solid #38bdf8;">
             ${imgContent}
           </div>
           <div style="font-weight: bold; font-size: 11px; margin: 6px 0 2px 0; color: #f8fafc;">${item.name}</div>
