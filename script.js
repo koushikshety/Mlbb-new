@@ -8,7 +8,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   await loadDynamicHeroList();
 });
 
-// Fetch dynamic hero list live from internet
 async function loadDynamicHeroList() {
   const heroListContainer = document.getElementById('heroList');
   if (!heroListContainer) return;
@@ -21,7 +20,6 @@ async function loadDynamicHeroList() {
     const heroNames = data.map(hero => hero.name || hero.hero_name).filter(Boolean);
     populateDatalist(heroNames);
   } catch (error) {
-    // Fallback list if offline or network blocks fetch
     const defaultHeroes = [
       "Miya", "Balmond", "Saber", "Alice", "Nana", "Tigreal", "Alucard", "Karina", "Akai", "Franco", 
       "Bane", "Bruno", "Clint", "Rafaela", "Eudora", "Zilong", "Fanny", "Freya", "Gord", "Natalia", 
@@ -59,7 +57,7 @@ Constraint Guidelines:
 2. Identify team synergy, gaps, and main enemy threats concisely.
 3. Recommend exactly 6 build items, 3 emblem talents with brief functional descriptions, and 1 battle spell.
 4. Item names MUST match standard MLBB nomenclature (e.g., "Demon Hunter Sword", "Corrosion Scythe", "Golden Staff").
-5. Keep explanations brief to ensure rapid JSON execution.
+5. Keep explanations brief to ensure rapid execution.
 6. Pick 1 hero from our team who is MOST CRITICAL to winning/defeating the enemy team composition.
 `;
 
@@ -142,7 +140,6 @@ function getAssetImageUrl(name, type) {
   return `https://mobile-legends.fandom.com/wiki/Special:FilePath/${formattedName}${type === 'talent' ? '_Talent' : ''}.png`;
 }
 
-// Resizes images to max 720px to boost response speed
 function processAndResizeImage(file, maxDimension = 720) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -214,7 +211,8 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       contents[0].parts.push(optimizedImage);
     }
 
-    const primaryModel = 'gemini-2.5-flash';
+    // Set directly to gemini-3.6-flash
+    const primaryModel = 'gemini-3.6-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
