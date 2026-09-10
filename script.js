@@ -39,46 +39,19 @@ Return strictly JSON format adhering to this structure:
 `;
 
 /**
- * Universal Fail-Safe MLBB Image Resolver
- * Combines MediaWiki API + Special:FilePath fallback
+ * Builds direct, clean image paths for MLBB items while using referrerpolicy to bypass CDN hotlink blocking.
  */
-async function getMLBBItemImageUrl(itemName) {
-  if (!itemName) return null;
+function getItemImageCandidates(itemName) {
+  if (!itemName) return [];
 
-  // 1. Convert to proper Title Case & replace spaces with underscores (e.g. "tough boots" -> "Tough_Boots")
-  const formattedName = itemName
-    .trim()
-    .toLowerCase()
-    .replace(/\b\w/g, (c) => c.toUpperCase())
-    .replace(/\s+/g, '_');
+  const cleanName = itemName.trim();
+  const formattedName = cleanName.replace(/\s+/g, '_').replace(/'/g, '%27');
 
-  const fileTitle = `File:${formattedName}.png`;
-
-  // METHOD A: Try MediaWiki API via AllOrigins Proxy
-  try {
-    const targetApiUrl = `https://mobile-legends.fandom.com/api.php?action=query&titles=${encodeURIComponent(fileTitle)}&prop=imageinfo&iiprop=url&format=json`;
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetApiUrl)}`;
-
-    const response = await fetch(proxyUrl);
-    if (response.ok) {
-      const proxyData = await response.json();
-      const data = JSON.parse(proxyData.contents);
-      const pages = data.query?.pages;
-
-      if (pages) {
-        const pageId = Object.keys(pages)[0];
-        if (pageId && pageId !== "-1" && pages[pageId]?.imageinfo?.[0]?.url) {
-          return pages[pageId].imageinfo[0].url;
-        }
-      }
-    }
-  } catch (error) {
-    console.warn(`Method A failed for ${itemName}. Executing Method B redirect fallback...`);
-  }
-
-  // METHOD B (Direct Fail-Safe): Fandom's Native Special:FilePath Redirect Engine
-  // Browser handles 302 redirect directly within the <img> tag without needing CORS proxies
-  return `https://mobile-legends.fandom.com/wiki/Special:FilePath/${formattedName}.png`;
+  return [
+    `https://mobile-legends.fandom.com/wiki/Special:FilePath/${formattedName}.png`,
+    `https://mobile-legends.fandom.com/wiki/Special:FilePath/${formattedName}.jpg`,
+    `./assets/items/${formattedName.toLowerCase()}.png`
+  ];
 }
 
 function processAndResizeImage(file, maxDimension = 1280) {
@@ -154,7 +127,8 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       contents[0].parts.push(optimizedImage);
     }
 
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+    // Exclusively targeting Gemini 3.6-flash model
+    const modelsToTry = ['gemini-3.6-flash'];
     let data = null;
     let lastError = null;
 
@@ -212,14 +186,14 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
     
     const result = JSON.parse(rawText);
-    await renderResults(result);
+    renderResults(result);
 
   } catch (error) {
     outputDiv.innerHTML = `<p style="color: #ef4444;">Error: ${error.message}</p>`;
   }
 });
 
-async function renderResults(data) {
+function renderResults(data) {
   const outputDiv = document.getElementById('output');
 
   let html = `
@@ -235,24 +209,21 @@ async function renderResults(data) {
   `;
 
   if (Array.isArray(data.recommended_build)) {
-    const buildWithImages = await Promise.all(
-      data.recommended_build.map(async (item) => {
-        const liveUrl = await getMLBBItemImageUrl(item.name);
-        return { ...item, liveUrl };
-      })
-    );
-
-    buildWithImages.forEach(item => {
-      const fallbackSvg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%2338bdf8"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-5.45 9-12V5l-9-4z"/></svg>`;
-      
-      const imgContent = item.liveUrl
-        ? `<img src="${item.liveUrl}" alt="${item.name}" loading="lazy" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.src='${fallbackSvg}';">`
-        : `<img src="${fallbackSvg}" alt="${item.name}" style="width: 24px; height: 24px;">`;
+    data.recommended_build.forEach(item => {
+      const candidates = getItemImageCandidates(item.name);
+      const primaryUrl = candidates[0] || '';
 
       html += `
         <div style="background: #0f172a; padding: 10px; border-radius: 8px; text-align: center;">
           <div style="width: 48px; height: 48px; margin: 0 auto; border-radius: 8px; overflow: hidden; background: #1e293b; display: flex; align-items: center; justify-content: center; border: 1px solid #38bdf8;">
-            ${imgContent}
+            <img 
+              src="${primaryUrl}" 
+              alt="${item.name}" 
+              loading="lazy" 
+              referrerpolicy="no-referrer"
+              style="width: 100%; height: 100%; object-fit: cover;" 
+              onerror="this.onerror=null; this.parentElement.innerHTML='🛡️';"
+            >
           </div>
           <div style="font-weight: bold; font-size: 11px; margin: 6px 0 2px 0; color: #f8fafc;">${item.name}</div>
           <div style="font-size: 10px; color: #94a3b8; line-height: 1.2;">${item.reason}</div>
