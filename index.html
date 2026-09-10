@@ -3,93 +3,56 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>MLBB AI Draft Companion</title>
+  <title>MLBB Draft Companion</title>
   <style>
-    :root {
-      --bg-color: #0f172a;
-      --card-bg: #1e293b;
-      --accent-color: #38bdf8;
-      --text-color: #f8fafc;
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background-color: #0b1329; color: #f8fafc; margin: 0; padding: 16px; display: flex; justify-content: center; }
+    .container { width: 100%; max-width: 480px; }
+    .card { background-color: #172554; border: 1px solid #1e3a8a; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+    h1 { text-align: center; font-size: 20px; color: #38bdf8; margin: 0 0 20px 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #93c5fd; margin-bottom: 6px; }
+    input[type="text"], input[type="password"], input[type="file"] {
+      width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #1e40af; background-color: #0f172a; color: #ffffff; font-size: 14px;
     }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background-color: var(--bg-color);
-      color: var(--text-color);
-      margin: 0;
-      padding: 16px;
-    }
-    .container {
-      max-width: 500px;
-      margin: 0 auto;
-    }
-    h2 {
-      text-align: center;
-      color: var(--accent-color);
-    }
-    .card {
-      background: var(--card-bg);
-      padding: 16px;
-      border-radius: 12px;
-      margin-bottom: 16px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-    }
-    label {
-      display: block;
-      margin-bottom: 6px;
-      font-weight: 600;
-    }
-    input[type="text"], input[type="file"], input[type="password"] {
-      width: 100%;
-      padding: 10px;
-      margin-bottom: 12px;
-      border-radius: 6px;
-      border: 1px solid #334155;
-      background: #0f172a;
-      color: #fff;
-      box-sizing: border-box;
-    }
+    input[type="text"]:focus, input[type="password"]:focus { outline: none; border-color: #38bdf8; }
     button {
-      width: 100%;
-      padding: 12px;
-      background: var(--accent-color);
-      border: none;
-      border-radius: 6px;
-      color: #0f172a;
-      font-weight: bold;
-      font-size: 16px;
-      cursor: pointer;
+      width: 100%; padding: 12px; background-color: #0284c7; color: white; border: none; border-radius: 8px; font-weight: bold; font-size: 15px; cursor: pointer; transition: background 0.2s;
     }
-    button:disabled {
-      background: #64748b;
-    }
-    #output {
-      line-height: 1.5;
-    }
+    button:hover { background-color: #0369a1; }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h2>🛡️ MLBB Draft Companion</h2>
 
-    <div class="card">
+<div class="container">
+  <div class="card">
+    <h1>🛡️ MLBB Draft Companion</h1>
+    
+    <div class="form-group">
       <label for="apiKey">Gemini API Key</label>
-      <input type="password" id="apiKey" placeholder="Paste your Gemini API key">
-      
+      <input type="password" id="apiKey" placeholder="Enter your Gemini API Key">
+    </div>
+
+    <div class="form-group">
       <label for="heroInput">Your Hero</label>
-      <input type="text" id="heroInput" placeholder="e.g., Suyou, Ling, Tigreal">
-      
+      <input type="text" id="heroInput" list="heroList" placeholder="Type hero name (e.g. cyc...)" autocomplete="off">
+      <datalist id="heroList"></datalist>
+    </div>
+
+    <div class="form-group">
       <label for="imageInput">Upload Draft / Pick Screenshot</label>
       <input type="file" id="imageInput" accept="image/*">
-
-      <button id="analyzeBtn">Analyze Draft & Get Build</button>
     </div>
 
-    <div class="card" id="resultCard" style="display: none;">
-      <h3>Analysis & Recommendation</h3>
-      <div id="output">Processing...</div>
-    </div>
+    <button id="analyzeBtn">Analyze Draft & Get Build</button>
   </div>
 
-  <script src="script.js"></script>
+  <div class="card hidden" id="resultCard">
+    <div id="output"></div>
+  </div>
+</div>
+
+<script src="script.js"></script>
 </body>
 </html>
