@@ -1,4 +1,4 @@
-// 1. Auto-load saved API Key from localStorage when the page loads
+// 1. Auto-load saved API Key from localStorage
 window.addEventListener('DOMContentLoaded', () => {
   const savedKey = localStorage.getItem('mlbb_gemini_key');
   if (savedKey) {
@@ -9,7 +9,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// 2. MLBB Rules System Prompt
+// 2. System Prompt
 const SYSTEM_PROMPT = `
 You are an expert MLBB Draft Analyzer. Analyze the team lineups from the input.
 Keep descriptions extremely short (under 10 words per item/spell).
@@ -36,7 +36,7 @@ Respond ONLY in valid JSON format:
 }
 `;
 
-// 3. Helper to convert image File to Base64
+// 3. Image conversion helper
 function fileToGenerativePart(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -51,7 +51,7 @@ function fileToGenerativePart(file) {
   });
 }
 
-// 4. Button Click Handler
+// 4. Click Handler
 document.getElementById('analyzeBtn').addEventListener('click', async () => {
   const apiKey = document.getElementById('apiKey').value.trim();
   const hero = document.getElementById('heroInput').value.trim();
@@ -64,7 +64,6 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     return;
   }
 
-  // Save the key permanently in local browser storage
   localStorage.setItem('mlbb_gemini_key', apiKey);
 
   resultCard.style.display = 'block';
@@ -90,8 +89,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
         contents: contents,
         generationConfig: {
           responseMimeType: "application/json",
-          maxOutputTokens: 600,
-          thinkingConfig: { thinkingBudget: 0 }
+          maxOutputTokens: 600
         }
       })
     });
@@ -107,7 +105,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
   }
 });
 
-// 5. Render JSON response with images
+// 5. Render Response
 function renderResults(data) {
   const outputDiv = document.getElementById('output');
   
