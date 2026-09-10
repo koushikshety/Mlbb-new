@@ -14,7 +14,7 @@ Constraint Guidelines:
 1. Carefully identify the exact 5 allied heroes and 5 enemy heroes shown in the draft screen before analyzing. Do NOT guess or hallucinate heroes that are not present.
 2. Identify team synergy, team gaps, and main enemy threats concisely.
 3. Recommend exactly 6 build items, 3 emblem talents, and 1 battle spell.
-4. Item names MUST match standard MLBB nomenclature (e.g., "Demon Hunter Sword", "Tough Boots", "Corrosion Scythe").
+4. Item names MUST match standard MLBB nomenclature (e.g., "Demon Hunter Sword", "Tough Boots", "Corrosion Scythe", "Windtalker").
 5. Reasons must be ultra-concise (under 8 words).
 
 Return strictly JSON format adhering to this structure:
@@ -37,35 +37,6 @@ Return strictly JSON format adhering to this structure:
   }
 }
 `;
-
-const ITEM_SPRITE_MAP = {
-  "demon hunter sword": { row: 0, col: 0 },
-  "tough boots": { row: 0, col: 1 },
-  "corrosion scythe": { row: 0, col: 2 },
-  "golden staff": { row: 0, col: 3 },
-  "wind of nature": { row: 0, col: 4 },
-  "immortality": { row: 0, col: 5 },
-  "fleeting time": { row: 1, col: 0 },
-  "ice queen wand": { row: 1, col: 1 },
-  "dominance ice": { row: 1, col: 2 },
-  "athena's shield": { row: 1, col: 3 },
-  "demon shoes": { row: 1, col: 4 },
-  "flask of the oasis": { row: 1, col: 5 }
-};
-
-const TALENT_SPRITE_MAP = {
-  "agility": { row: 0, col: 0 },
-  "pull yourself together": { row: 0, col: 1 },
-  "focusing mark": { row: 0, col: 2 },
-  "thrill": { row: 0, col: 3 },
-  "swift": { row: 0, col: 4 },
-  "tenacity": { row: 0, col: 5 }
-};
-
-const ITEM_ICON_SIZE = 40;
-const ITEM_COLS = 6;
-const TALENT_ICON_SIZE = 24;
-const TALENT_COLS = 6;
 
 function processAndResizeImage(file, maxDimension = 1280) {
   return new Promise((resolve, reject) => {
@@ -115,7 +86,8 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 document.getElementById('analyzeBtn').addEventListener('click', async () => {
   const apiKey = document.getElementById('apiKey').value.trim();
-  const hero = document.getElementById('heroInput').value.trim();
+  const heroInput = document.getElementById('heroInput');
+  const hero = heroInput ? heroInput.value.trim() : '';
   const fileInput = document.getElementById('imageInput');
   const outputDiv = document.getElementById('output');
   const resultCard = document.getElementById('resultCard');
@@ -194,8 +166,6 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     }
 
     let rawText = data.candidates[0].content.parts[0].text;
-    
-    // Clean code block ticks before JSON parsing
     rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
     
     const result = JSON.parse(rawText);
@@ -205,6 +175,15 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     outputDiv.innerHTML = `<p style="color: #ef4444;">Error: ${error.message}</p>`;
   }
 });
+
+// Helper function to format item names into Wiki file names
+function getItemImageUrl(itemName) {
+  const formattedName = itemName
+    .trim()
+    .replace(/'/g, '%27')
+    .replace(/\s+/g, '_');
+  return `https://mobile-legends.fandom.com/wiki/Special:FilePath/${formattedName}.png`;
+}
 
 function renderResults(data) {
   const outputDiv = document.getElementById('output');
@@ -223,35 +202,13 @@ function renderResults(data) {
 
   if (Array.isArray(data.recommended_build)) {
     data.recommended_build.forEach(item => {
-      const cleanName = item.name.toLowerCase().trim();
-      const coords = ITEM_SPRITE_MAP[cleanName];
-
-      let iconHtml = '';
-      if (coords) {
-        const xOffset = -(coords.col * ITEM_ICON_SIZE);
-        const yOffset = -(coords.row * ITEM_ICON_SIZE);
-
-        iconHtml = `
-          <div style="
-            width: ${ITEM_ICON_SIZE}px; 
-            height: ${ITEM_ICON_SIZE}px; 
-            margin: 0 auto; 
-            border-radius: 50%; 
-            background-image: url('./assets/items.jpg'); 
-            background-position: ${xOffset}px ${yOffset}px; 
-            background-size: ${ITEM_COLS * ITEM_ICON_SIZE}px auto;
-            background-repeat: no-repeat;">
-          </div>`;
-      } else {
-        iconHtml = `
-          <div style="width: 38px; height: 38px; margin: 0 auto; background: #0284c7; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px;">
-            🛡️
-          </div>`;
-      }
+      const imageUrl = getItemImageUrl(item.name);
 
       html += `
         <div style="background: #0f172a; padding: 10px; border-radius: 8px; text-align: center;">
-          ${iconHtml}
+          <div style="width: 44px; height: 44px; margin: 0 auto; border-radius: 8px; overflow: hidden; background: #1e293b; display: flex; align-items: center; justify-content: center; border: 1px solid #38bdf8;">
+            <img src="${imageUrl}" alt="${item.name}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerHTML='🛡️';">
+          </div>
           <div style="font-weight: bold; font-size: 11px; margin: 6px 0 2px 0; color: #f8fafc;">${item.name}</div>
           <div style="font-size: 10px; color: #94a3b8; line-height: 1.2;">${item.reason}</div>
         </div>
@@ -268,32 +225,9 @@ function renderResults(data) {
 
   if (Array.isArray(data.emblem?.talents)) {
     data.emblem.talents.forEach(talent => {
-      const cleanTalent = talent.toLowerCase().trim();
-      const coords = TALENT_SPRITE_MAP[cleanTalent];
-
-      let talentIconHtml = '⚡ ';
-      if (coords) {
-        const xOffset = -(coords.col * TALENT_ICON_SIZE);
-        const yOffset = -(coords.row * TALENT_ICON_SIZE);
-
-        talentIconHtml = `
-          <span style="
-            display: inline-block;
-            width: ${TALENT_ICON_SIZE}px; 
-            height: ${TALENT_ICON_SIZE}px; 
-            vertical-align: middle;
-            margin-right: 4px;
-            border-radius: 50%; 
-            background-image: url('./assets/talents.jpg'); 
-            background-position: ${xOffset}px ${yOffset}px; 
-            background-size: ${TALENT_COLS * TALENT_ICON_SIZE}px auto;
-            background-repeat: no-repeat;">
-          </span>`;
-      }
-
       html += `
         <span style="background: #1e293b; color: #e2e8f0; border: 1px solid #38bdf8; font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 500; display: inline-flex; align-items: center;">
-          ${talentIconHtml}${talent}
+          ⚡ ${talent}
         </span>
       `;
     });
