@@ -82,6 +82,29 @@ function processAndResizeImage(file, maxDimension = 1280) {
   });
 }
 
+// Dynamically query Fandom MediaWiki API for absolute CDN image target
+async function fetchFandomImageUrl(itemName) {
+  const formattedName = itemName.trim().replace(/\s+/g, '_');
+  const fileName = `File:${formattedName}.png`;
+  const apiUrl = `https://mobile-legends.fandom.com/api.php?action=query&titles=${encodeURIComponent(fileName)}&prop=imageinfo&iiprop=url&format=json&origin=*`;
+
+  try {
+    const res = await fetch(apiUrl);
+    const data = await res.json();
+    const pages = data.query?.pages;
+    if (!pages) return null;
+    
+    const pageId = Object.keys(pages)[0];
+
+    if (pageId !== "-1" && pages[pageId].imageinfo?.[0]?.url) {
+      return pages[pageId].imageinfo[0].url;
+    }
+  } catch (err) {
+    console.error("Failed image resolution for:", itemName, err);
+  }
+  return null;
+}
+
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 document.getElementById('analyzeBtn').addEventListener('click', async () => {
@@ -111,7 +134,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       contents[0].parts.push(optimizedImage);
     }
 
-    const modelsToTry = ['gemini-3.6-flash'];
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash'];
     let data = null;
     let lastError = null;
 
@@ -169,23 +192,14 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
     
     const result = JSON.parse(rawText);
-    renderResults(result);
+    await renderResults(result);
 
   } catch (error) {
     outputDiv.innerHTML = `<p style="color: #ef4444;">Error: ${error.message}</p>`;
   }
 });
 
-// Helper function to format item names into Wiki file names
-function getItemImageUrl(itemName) {
-  const formattedName = itemName
-    .trim()
-    .replace(/'/g, '%27')
-    .replace(/\s+/g, '_');
-  return `https://mobile-legends.fandom.com/wiki/Special:FilePath/${formattedName}.png`;
-}
-
-function renderResults(data) {
+async function renderResults(data) {
   const outputDiv = document.getElementById('output');
 
   let html = `
@@ -201,13 +215,22 @@ function renderResults(data) {
   `;
 
   if (Array.isArray(data.recommended_build)) {
-    data.recommended_build.forEach(item => {
-      const imageUrl = getItemImageUrl(item.name);
+    const buildItemsWithUrls = await Promise.all(
+      data.recommended_build.map(async (item) => {
+        const url = await fetchFandomImageUrl(item.name);
+        return { ...item, url };
+      })
+    );
+
+    buildItemsWithUrls.forEach(item => {
+      const imgContent = item.url 
+        ? `<img src="${item.url}" alt="${item.name}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerHTML='🛡️';">`
+        : `🛡️`;
 
       html += `
         <div style="background: #0f172a; padding: 10px; border-radius: 8px; text-align: center;">
           <div style="width: 44px; height: 44px; margin: 0 auto; border-radius: 8px; overflow: hidden; background: #1e293b; display: flex; align-items: center; justify-content: center; border: 1px solid #38bdf8;">
-            <img src="${imageUrl}" alt="${item.name}" style="width: 100%; height: 100%; object-fit: cover;" onerror="this.onerror=null; this.parentElement.innerHTML='🛡️';">
+            ${imgContent}
           </div>
           <div style="font-weight: bold; font-size: 11px; margin: 6px 0 2px 0; color: #f8fafc;">${item.name}</div>
           <div style="font-size: 10px; color: #94a3b8; line-height: 1.2;">${item.reason}</div>
