@@ -1,65 +1,115 @@
-// 1. Auto-load saved API Key on page load
 window.addEventListener('DOMContentLoaded', () => {
   const savedKey = localStorage.getItem('mlbb_gemini_key');
   if (savedKey) {
     const apiKeyInput = document.getElementById('apiKey');
-    if (apiKeyInput) {
-      apiKeyInput.value = savedKey;
-    }
+    if (apiKeyInput) apiKeyInput.value = savedKey;
   }
 });
 
-// 2. Draft & Team Synergy System Prompt
+// Enforce strict output constraints in the system prompt
 const SYSTEM_PROMPT = `
 You are an expert Mobile Legends: Bang Bang (MLBB) Draft Analyzer.
 Analyze the 5v5 draft from the provided image or text input.
 
-Tasks:
-1. Identify team synergy, team gaps/weaknesses, and main enemy threats.
-2. Recommend an optimal counter-build path, emblems, and battle spell.
-3. Keep reasons short (under 10 words per item/spell).
+Constraint Guidelines:
+1. Carefully identify the exact 5 allied heroes and 5 enemy heroes shown in the draft screen before analyzing. Do NOT guess or hallucinate heroes that are not present.
+2. Identify team synergy, team gaps, and main enemy threats concisely.
+3. Recommend exactly 6 build items, 3 emblem talents, and 1 battle spell.
+4. Item names MUST match standard MLBB nomenclature (e.g., "Demon Hunter Sword", "Tough Boots", "Corrosion Scythe").
+5. Reasons must be ultra-concise (under 8 words).
 
-Respond ONLY in valid JSON format:
+Return strictly JSON format adhering to this structure:
 {
   "team_analysis": {
-    "synergy_notes": "Short 1-2 sentence team synergy overview.",
-    "team_gaps": "Main team weaknesses or gaps.",
-    "enemy_threats": "Key enemy threats to watch out for."
+    "synergy_notes": "Short synergy summary.",
+    "team_gaps": "Main team gaps.",
+    "enemy_threats": "Key enemy threats."
   },
   "recommended_build": [
-    {"name": "Demon Hunter Sword", "reason": "Counter high HP tanks"},
-    {"name": "Tough Boots", "reason": "Reduce CC duration"},
-    {"name": "Corrosion Scythe", "reason": "Slow enemy movement"},
-    {"name": "Golden Staff", "reason": "Trigger item passives"},
-    {"name": "Wind of Nature", "reason": "Immunity to physical burst"},
-    {"name": "Immortality", "reason": "Late game revive"}
+    {"name": "Item Name", "reason": "Short reason"}
   ],
   "emblem": {
-    "name": "Custom Support Emblem",
-    "talents": ["Agility", "Pull Yourself Together", "Focusing Mark"]
+    "name": "Emblem Set Name",
+    "talents": ["Talent 1", "Talent 2", "Talent 3"]
   },
   "battle_spell": {
-    "name": "Flicker",
-    "reason": "Mobility & quick escape"
+    "name": "Spell Name",
+    "reason": "Short reason"
   }
 }
 `;
 
-// Helper: Format string into clean filename (e.g., "Demon Hunter Sword" -> "demon-hunter-sword")
-function slugify(text) {
-  return text.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-}
+const ITEM_SPRITE_MAP = {
+  "demon hunter sword": { row: 0, col: 0 },
+  "tough boots": { row: 0, col: 1 },
+  "corrosion scythe": { row: 0, col: 2 },
+  "golden staff": { row: 0, col: 3 },
+  "wind of nature": { row: 0, col: 4 },
+  "immortality": { row: 0, col: 5 },
+  "fleeting time": { row: 1, col: 0 },
+  "ice queen wand": { row: 1, col: 1 },
+  "dominance ice": { row: 1, col: 2 },
+  "athena's shield": { row: 1, col: 3 },
+  "demon shoes": { row: 1, col: 4 },
+  "flask of the oasis": { row: 1, col: 5 }
+};
 
-// 3. Image conversion helper
-function fileToGenerativePart(file) {
+const TALENT_SPRITE_MAP = {
+  "agility": { row: 0, col: 0 },
+  "pull yourself together": { row: 0, col: 1 },
+  "focusing mark": { row: 0, col: 2 },
+  "thrill": { row: 0, col: 3 },
+  "swift": { row: 0, col: 4 },
+  "tenacity": { row: 0, col: 5 }
+};
+
+const ITEM_ICON_SIZE = 40;
+const ITEM_COLS = 6;
+const TALENT_ICON_SIZE = 24;
+const TALENT_COLS = 6;
+
+// Image Optimization: Downscales screenshots proportionally while preserving aspect ratio and preventing black renders
+function processAndResizeImage(file, maxDimension = 1280) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
-    reader.onloadend = () => resolve({
-      inlineData: {
-        data: reader.result.split(',')[1],
-        mimeType: file.type
-      }
-    });
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+
+        // Fill white background to prevent black canvas export on transparent formats
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        resolve({
+          inlineData: {
+            data: dataUrl.split(',')[1],
+            mimeType: 'image/jpeg'
+          }
+        });
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
@@ -67,7 +117,6 @@ function fileToGenerativePart(file) {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// 4. Submit & Analyze Button Handler
 document.getElementById('analyzeBtn').addEventListener('click', async () => {
   const apiKey = document.getElementById('apiKey').value.trim();
   const hero = document.getElementById('heroInput').value.trim();
@@ -81,25 +130,20 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
   }
 
   localStorage.setItem('mlbb_gemini_key', apiKey);
-
   resultCard.style.display = 'block';
-  outputDiv.innerHTML = '<p style="color: #38bdf8;">Analyzing draft & team composition...</p>';
+  outputDiv.innerHTML = '<p style="color: #38bdf8;">Optimizing screenshot & analyzing draft...</p>';
 
   try {
     const contents = [{
-      parts: [{ text: `I am playing ${hero}. Read draft image, analyze team synergy/gaps, and give builds.` }]
+      parts: [{ text: `Playing Hero: ${hero}. Analyze team synergy, identify counters based ONLY on the actual heroes in the image, and generate optimal item build.` }]
     }];
 
     if (fileInput.files.length > 0) {
-      const imagePart = await fileToGenerativePart(fileInput.files[0]);
-      contents[0].parts.push(imagePart);
+      const optimizedImage = await processAndResizeImage(fileInput.files[0], 1280);
+      contents[0].parts.push(optimizedImage);
     }
 
-    const modelsToTry = [
-      'gemini-3.7-flash',
-      'gemini-3.6-flash'
-    ];
-
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash'];
     let data = null;
     let lastError = null;
 
@@ -109,8 +153,8 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       for (let attempt = 1; attempt <= 2; attempt++) {
         try {
           if (attempt > 1) {
-            outputDiv.innerHTML = `<p style="color: #fbbf24;">Server busy, retrying ${model}...</p>`;
-            await delay(1500);
+            outputDiv.innerHTML = `<p style="color: #fbbf24;">Retrying request on ${model}...</p>`;
+            await delay(1200);
           }
 
           const response = await fetch(url, {
@@ -121,14 +165,15 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
               contents: contents,
               generationConfig: {
                 responseMimeType: "application/json",
-                maxOutputTokens: 2048
+                temperature: 0.15,
+                maxOutputTokens: 1500
               }
             })
           });
 
           const resData = await response.json();
 
-          if (response.status === 503) {
+          if (response.status === 503 || response.status === 429) {
             lastError = resData;
             continue;
           }
@@ -140,20 +185,19 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
 
           data = resData;
           break;
-
         } catch (err) {
           lastError = err;
         }
       }
-
       if (data) break;
     }
 
     if (!data) {
-      throw new Error(lastError ? (lastError.message || JSON.stringify(lastError, null, 2)) : "All endpoints busy. Please try again.");
+      throw new Error(lastError ? (lastError.message || JSON.stringify(lastError)) : "Service unavailable.");
     }
 
-    const result = JSON.parse(data.candidates[0].content.parts[0].text);
+    const rawText = data.candidates[0].content.parts[0].text;
+    const result = JSON.parse(rawText);
     renderResults(result);
 
   } catch (error) {
@@ -161,35 +205,51 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
   }
 });
 
-// 5. Render JSON response with fallback asset support
 function renderResults(data) {
   const outputDiv = document.getElementById('output');
 
   let html = `
-    <!-- Strategic Analysis Card -->
     <div style="background: #0f172a; padding: 14px; border-radius: 8px; margin-bottom: 16px;">
       <h4 style="margin-top:0; color: #38bdf8;">Strategic Analysis</h4>
-      <p style="color: #cbd5e1; font-size: 13px; margin: 4px 0;"><strong>🤝 Synergy:</strong> ${data.team_analysis?.synergy_notes || 'Analysis complete.'}</p>
+      <p style="color: #cbd5e1; font-size: 13px; margin: 4px 0;"><strong>🤝 Synergy:</strong> ${data.team_analysis?.synergy_notes || 'Complete'}</p>
       ${data.team_analysis?.team_gaps ? `<p style="color: #f87171; font-size: 13px; margin: 4px 0;"><strong>⚠️ Team Gaps:</strong> ${data.team_analysis.team_gaps}</p>` : ''}
       ${data.team_analysis?.enemy_threats ? `<p style="color: #fbbf24; font-size: 13px; margin: 4px 0;"><strong>🎯 Main Threats:</strong> ${data.team_analysis.enemy_threats}</p>` : ''}
     </div>
 
-    <!-- Recommended Build Path Grid -->
     <h4 style="color: #38bdf8;">Recommended Build Path</h4>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 20px;">
   `;
 
-  // Render items looking for assets/items/item-name.png
   data.recommended_build.forEach(item => {
-    const itemSlug = slugify(item.name);
-    const itemImgPath = `./assets/items/${itemSlug}.png`;
+    const cleanName = item.name.toLowerCase().trim();
+    const coords = ITEM_SPRITE_MAP[cleanName];
+
+    let iconHtml = '';
+    if (coords) {
+      const xOffset = -(coords.col * ITEM_ICON_SIZE);
+      const yOffset = -(coords.row * ITEM_ICON_SIZE);
+
+      iconHtml = `
+        <div style="
+          width: ${ITEM_ICON_SIZE}px; 
+          height: ${ITEM_ICON_SIZE}px; 
+          margin: 0 auto; 
+          border-radius: 50%; 
+          background-image: url('./assets/items.jpg'); 
+          background-position: ${xOffset}px ${yOffset}px; 
+          background-size: ${ITEM_COLS * ITEM_ICON_SIZE}px auto;
+          background-repeat: no-repeat;">
+        </div>`;
+    } else {
+      iconHtml = `
+        <div style="width: 38px; height: 38px; margin: 0 auto; background: #0284c7; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px;">
+          🛡️
+        </div>`;
+    }
 
     html += `
       <div style="background: #0f172a; padding: 10px; border-radius: 8px; text-align: center;">
-        <img src="${itemImgPath}" 
-             onerror="this.onerror=null; this.outerHTML='<div style=\'width:38px;height:38px;margin:0 auto;background:#0284c7;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;\'>🛡️</div>';" 
-             style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; margin: 0 auto; display: block;" 
-             alt="${item.name}" />
+        ${iconHtml}
         <div style="font-weight: bold; font-size: 11px; margin: 6px 0 2px 0; color: #f8fafc;">${item.name}</div>
         <div style="font-size: 10px; color: #94a3b8; line-height: 1.2;">${item.reason}</div>
       </div>
@@ -197,31 +257,44 @@ function renderResults(data) {
   });
 
   html += `</div>
-    <!-- Emblem & Talents Badges -->
     <h4 style="color: #38bdf8;">Emblem & Talents</h4>
     <div style="background: #0f172a; padding: 12px; border-radius: 8px; margin-bottom: 20px;">
       <strong style="color: #38bdf8; font-size: 13px;">${data.emblem.name}</strong>
       <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
   `;
 
-  // Render talents looking for assets/talents/talent-name.png
   data.emblem.talents.forEach(talent => {
-    const talentSlug = slugify(talent);
-    const talentImgPath = `./assets/talents/${talentSlug}.png`;
+    const cleanTalent = talent.toLowerCase().trim();
+    const coords = TALENT_SPRITE_MAP[cleanTalent];
+
+    let talentIconHtml = '⚡ ';
+    if (coords) {
+      const xOffset = -(coords.col * TALENT_ICON_SIZE);
+      const yOffset = -(coords.row * TALENT_ICON_SIZE);
+
+      talentIconHtml = `
+        <span style="
+          display: inline-block;
+          width: ${TALENT_ICON_SIZE}px; 
+          height: ${TALENT_ICON_SIZE}px; 
+          vertical-align: middle;
+          margin-right: 4px;
+          border-radius: 50%; 
+          background-image: url('./assets/talents.jpg'); 
+          background-position: ${xOffset}px ${yOffset}px; 
+          background-size: ${TALENT_COLS * TALENT_ICON_SIZE}px auto;
+          background-repeat: no-repeat;">
+        </span>`;
+    }
 
     html += `
-      <span style="background: #1e293b; color: #e2e8f0; border: 1px solid #38bdf8; font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px;">
-        <img src="${talentImgPath}" 
-             onerror="this.style.display='none';" 
-             style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover;" 
-             alt="" />
-        ⚡ ${talent}
+      <span style="background: #1e293b; color: #e2e8f0; border: 1px solid #38bdf8; font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 500; display: inline-flex; align-items: center;">
+        ${talentIconHtml}${talent}
       </span>
     `;
   });
 
   html += `</div></div>
-    <!-- Battle Spell Card -->
     <h4 style="color: #38bdf8;">Battle Spell</h4>
     <div style="background: #0f172a; padding: 12px; border-radius: 8px; display: flex; align-items: center; gap: 12px;">
       <div style="background: #0284c7; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px;">
