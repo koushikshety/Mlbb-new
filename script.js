@@ -82,7 +82,7 @@ function processAndResizeImage(file, maxDimension = 1280) {
   });
 }
 
-// Dynamically query Fandom MediaWiki API for absolute CDN image target
+// Dynamically query Fandom MediaWiki API for CDN image target
 async function fetchFandomImageUrl(itemName) {
   const formattedName = itemName.trim().replace(/\s+/g, '_');
   const fileName = `File:${formattedName}.png`;
@@ -134,7 +134,8 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       contents[0].parts.push(optimizedImage);
     }
 
-    const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash'];
+    // Exclusively targeting 3.6 model series
+    const modelsToTry = ['gemini-3.6-flash'];
     let data = null;
     let lastError = null;
 
