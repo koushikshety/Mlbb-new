@@ -50,15 +50,13 @@ function populateDatalist(heroNames) {
 
 const SYSTEM_PROMPT = `
 You are an expert Mobile Legends: Bang Bang (MLBB) Draft Analyzer.
-Analyze the 5v5 draft from the provided image (which may be a draft picking screen, battle setup, or post-match summary).
+Analyze the 5v5 draft from the provided image.
 
 Constraint Guidelines:
-1. Carefully scan all hero avatars on both allies and enemies sides of the screen.
-2. Identify team synergy, gaps, and main enemy threats concisely.
-3. Recommend exactly 6 build items, 3 emblem talents with brief functional descriptions, and 1 battle spell.
-4. Item names MUST match standard MLBB nomenclature (e.g., "Demon Hunter Sword", "Corrosion Scythe", "Golden Staff").
-5. Keep explanations brief to ensure rapid execution.
-6. Pick 1 hero from our team who is MOST CRITICAL to winning/defeating the enemy team composition.
+1. Scan hero avatars on both ally and enemy sides.
+2. Keep explanations strictly under 10 words per item/reason to ensure complete JSON output without cutoffs.
+3. Recommend exactly 6 build items, 3 emblem talents, and 1 battle spell.
+4. Item names MUST match standard MLBB nomenclature (e.g., "Demon Hunter Sword", "Corrosion Scythe").
 `;
 
 const RESPONSE_SCHEMA = {
@@ -211,8 +209,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       contents[0].parts.push(optimizedImage);
     }
 
-    // Set directly to gemini-3.6-flash
-    const primaryModel = 'gemini-3.6-flash';
+    const primaryModel = 'gemini-2.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
@@ -225,7 +222,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
           responseMimeType: "application/json",
           responseSchema: RESPONSE_SCHEMA,
           temperature: 0.1,
-          maxOutputTokens: 1200
+          maxOutputTokens: 2500
         }
       })
     });
@@ -233,10 +230,17 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     const resData = await response.json();
 
     if (!response.ok) {
-      throw new Error(resData?.error?.message || "Failed to generate draft analysis.");
+      throw new Error(resData?.error?.message || `API Error ${response.status}`);
     }
 
-    const rawText = resData.candidates[0].content.parts[0].text.trim();
+    let rawText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) {
+      throw new Error("Empty response received from API.");
+    }
+
+    // Clean JSON markdown code blocks if wrapped by API
+    rawText = rawText.trim().replace(/^```json\s*/i, '').replace(/\s*```$/i, '');
+
     const result = JSON.parse(rawText);
     renderResults(result);
 
