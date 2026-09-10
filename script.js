@@ -60,6 +60,9 @@ function fileToGenerativePart(file) {
   });
 }
 
+// Helper: Sleep function for retry delay
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // 4. Submit & Analyze Button Handler
 document.getElementById('analyzeBtn').addEventListener('click', async () => {
   const apiKey = document.getElementById('apiKey').value.trim();
@@ -91,23 +94,47 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
 
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: contents,
-        generationConfig: {
-          responseMimeType: "application/json",
-          maxOutputTokens: 2048
-        }
-      })
-    });
+    let response = null;
+    let resData = null;
+    const maxRetries = 3;
 
-    const data = await response.json();
-    if (!response.ok) throw new Error(JSON.stringify(data, null, 2));
+    // Retry loop with delay for 503 capacity spikes
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      if (attempt > 1) {
+        outputDiv.innerHTML = `<p style="color: #fbbf24;">Server busy, retrying (${attempt}/${maxRetries})...</p>`;
+        await delay(2000); // Wait 2 seconds before retrying
+      }
 
-    const result = JSON.parse(data.candidates[0].content.parts[0].text);
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: contents,
+          generationConfig: {
+            responseMimeType: "application/json",
+            maxOutputTokens: 2048
+          }
+        })
+      });
+
+      resData = await response.json();
+
+      if (response.ok) {
+        break; // Request succeeded
+      }
+
+      // If error is not 503 (e.g. invalid API key or bad request), don't retry
+      if (response.status !== 503) {
+        throw new Error(JSON.stringify(resData, null, 2));
+      }
+    }
+
+    if (!response || !response.ok) {
+      throw new Error(JSON.stringify(resData, null, 2));
+    }
+
+    const result = JSON.parse(resData.candidates[0].content.parts[0].text);
     renderResults(result);
 
   } catch (error) {
