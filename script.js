@@ -1,5 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
-
 // 1. MLBB Rules System Prompt
 const SYSTEM_PROMPT = `
 You are an expert Mobile Legends: Bang Bang (MLBB) Draft & Item Build Analyzer.
@@ -60,24 +58,47 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
   outputDiv.innerText = 'Analyzing draft screenshot with Gemini 2.5 Flash...';
 
   try {
-    const ai = new GoogleGenAI({ apiKey: apiKey });
-    let contents = [`I am playing as ${hero}. Analyze this draft screenshot and provide counter builds, emblems, and spells.`];
+    // Build content array (Text prompt + image if uploaded)
+    const contents = [
+      {
+        parts: [
+          { text: `I am playing as ${hero}. Analyze this draft screenshot and provide counter builds, emblems, and spells.` }
+        ]
+      }
+    ];
 
     if (fileInput.files.length > 0) {
       const imagePart = await fileToGenerativePart(fileInput.files[0]);
-      contents.push(imagePart);
+      contents[0].parts.push(imagePart);
     }
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: contents,
-      config: {
-        systemInstruction: SYSTEM_PROMPT
-      }
+    // Direct REST call to Gemini 2.5 Flash endpoint
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        systemInstruction: {
+          parts: [{ text: SYSTEM_PROMPT }]
+        },
+        contents: contents
+      })
     });
 
-    outputDiv.innerText = response.text;
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(JSON.stringify(data, null, 2));
+    }
+
+    // Extract generated text response
+    const analysisText = data.candidates[0].content.parts[0].text;
+    outputDiv.innerText = analysisText;
+
   } catch (error) {
-    outputDiv.innerText = `Error: ${JSON.stringify(error, null, 2)}`;
+    outputDiv.innerText = `Error: ${error.message}`;
   }
 });
