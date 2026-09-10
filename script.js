@@ -23,7 +23,7 @@ Respond ONLY in valid JSON format:
 {
   "team_analysis": {
     "synergy_notes": "Short 1-2 sentence team synergy overview.",
-    "team_gaps": "Main team weaknesses or gaps (e.g., lack of anti-regen, squishy frontline).",
+    "team_gaps": "Main team weaknesses or gaps.",
     "enemy_threats": "Key enemy threats to watch out for."
   },
   "recommended_build": [
@@ -99,7 +99,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
         contents: contents,
         generationConfig: {
           responseMimeType: "application/json",
-          maxOutputTokens: 800
+          maxOutputTokens: 2048
         }
       })
     });
@@ -115,7 +115,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
   }
 });
 
-// 5. Render JSON response with styled badges (fixes broken image issue)
+// 5. Render JSON response with styled badges
 function renderResults(data) {
   const outputDiv = document.getElementById('output');
 
