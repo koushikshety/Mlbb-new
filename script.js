@@ -1,3 +1,15 @@
+// 1. Auto-load saved API Key from localStorage when the page loads
+window.addEventListener('DOMContentLoaded', () => {
+  const savedKey = localStorage.getItem('mlbb_gemini_key');
+  if (savedKey) {
+    const apiKeyInput = document.getElementById('apiKey');
+    if (apiKeyInput) {
+      apiKeyInput.value = savedKey;
+    }
+  }
+});
+
+// 2. MLBB Rules System Prompt
 const SYSTEM_PROMPT = `
 You are an expert MLBB Draft Analyzer. Analyze the team lineups from the input.
 Keep descriptions extremely short (under 10 words per item/spell).
@@ -24,6 +36,7 @@ Respond ONLY in valid JSON format:
 }
 `;
 
+// 3. Helper to convert image File to Base64
 function fileToGenerativePart(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -38,6 +51,7 @@ function fileToGenerativePart(file) {
   });
 }
 
+// 4. Button Click Handler
 document.getElementById('analyzeBtn').addEventListener('click', async () => {
   const apiKey = document.getElementById('apiKey').value.trim();
   const hero = document.getElementById('heroInput').value.trim();
@@ -49,6 +63,9 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     alert('Please enter your API Key and Hero.');
     return;
   }
+
+  // Save the key permanently in local browser storage
+  localStorage.setItem('mlbb_gemini_key', apiKey);
 
   resultCard.style.display = 'block';
   outputDiv.innerHTML = '<p>Analyzing draft...</p>';
@@ -73,8 +90,8 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
         contents: contents,
         generationConfig: {
           responseMimeType: "application/json",
-          maxOutputTokens: 600, // Capping tokens speeds up generation significantly
-          thinkingConfig: { thinkingBudget: 0 } // Disables extra thinking latency
+          maxOutputTokens: 600,
+          thinkingConfig: { thinkingBudget: 0 }
         }
       })
     });
@@ -90,6 +107,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
   }
 });
 
+// 5. Render JSON response with images
 function renderResults(data) {
   const outputDiv = document.getElementById('output');
   
