@@ -45,6 +45,11 @@ Respond ONLY in valid JSON format:
 }
 `;
 
+// Helper: Format string into clean filename (e.g., "Demon Hunter Sword" -> "demon-hunter-sword")
+function slugify(text) {
+  return text.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+
 // 3. Image conversion helper
 function fileToGenerativePart(file) {
   return new Promise((resolve, reject) => {
@@ -60,7 +65,6 @@ function fileToGenerativePart(file) {
   });
 }
 
-// Helper: Sleep function for retry delay
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // 4. Submit & Analyze Button Handler
@@ -76,7 +80,6 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
     return;
   }
 
-  // Save key to local storage permanently
   localStorage.setItem('mlbb_gemini_key', apiKey);
 
   resultCard.style.display = 'block';
@@ -92,49 +95,65 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       contents[0].parts.push(imagePart);
     }
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${apiKey}`;
+    const modelsToTry = [
+      'gemini-3.7-flash',
+      'gemini-3.6-flash'
+    ];
 
-    let response = null;
-    let resData = null;
-    const maxRetries = 3;
+    let data = null;
+    let lastError = null;
 
-    // Retry loop with delay for 503 capacity spikes
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-      if (attempt > 1) {
-        outputDiv.innerHTML = `<p style="color: #fbbf24;">Server busy, retrying (${attempt}/${maxRetries})...</p>`;
-        await delay(2000); // Wait 2 seconds before retrying
-      }
+    for (const model of modelsToTry) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
-      response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: contents,
-          generationConfig: {
-            responseMimeType: "application/json",
-            maxOutputTokens: 2048
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          if (attempt > 1) {
+            outputDiv.innerHTML = `<p style="color: #fbbf24;">Server busy, retrying ${model}...</p>`;
+            await delay(1500);
           }
-        })
-      });
 
-      resData = await response.json();
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+              contents: contents,
+              generationConfig: {
+                responseMimeType: "application/json",
+                maxOutputTokens: 2048
+              }
+            })
+          });
 
-      if (response.ok) {
-        break; // Request succeeded
+          const resData = await response.json();
+
+          if (response.status === 503) {
+            lastError = resData;
+            continue;
+          }
+
+          if (!response.ok) {
+            lastError = resData;
+            break;
+          }
+
+          data = resData;
+          break;
+
+        } catch (err) {
+          lastError = err;
+        }
       }
 
-      // If error is not 503 (e.g. invalid API key or bad request), don't retry
-      if (response.status !== 503) {
-        throw new Error(JSON.stringify(resData, null, 2));
-      }
+      if (data) break;
     }
 
-    if (!response || !response.ok) {
-      throw new Error(JSON.stringify(resData, null, 2));
+    if (!data) {
+      throw new Error(lastError ? (lastError.message || JSON.stringify(lastError, null, 2)) : "All endpoints busy. Please try again.");
     }
 
-    const result = JSON.parse(resData.candidates[0].content.parts[0].text);
+    const result = JSON.parse(data.candidates[0].content.parts[0].text);
     renderResults(result);
 
   } catch (error) {
@@ -142,7 +161,7 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
   }
 });
 
-// 5. Render JSON response with styled badges
+// 5. Render JSON response with fallback asset support
 function renderResults(data) {
   const outputDiv = document.getElementById('output');
 
@@ -160,12 +179,17 @@ function renderResults(data) {
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin-bottom: 20px;">
   `;
 
+  // Render items looking for assets/items/item-name.png
   data.recommended_build.forEach(item => {
+    const itemSlug = slugify(item.name);
+    const itemImgPath = `./assets/items/${itemSlug}.png`;
+
     html += `
       <div style="background: #0f172a; padding: 10px; border-radius: 8px; text-align: center;">
-        <div style="width: 38px; height: 38px; margin: 0 auto; background: #0284c7; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 16px;">
-          🛡️
-        </div>
+        <img src="${itemImgPath}" 
+             onerror="this.onerror=null; this.outerHTML='<div style=\'width:38px;height:38px;margin:0 auto;background:#0284c7;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;\'>🛡️</div>';" 
+             style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; margin: 0 auto; display: block;" 
+             alt="${item.name}" />
         <div style="font-weight: bold; font-size: 11px; margin: 6px 0 2px 0; color: #f8fafc;">${item.name}</div>
         <div style="font-size: 10px; color: #94a3b8; line-height: 1.2;">${item.reason}</div>
       </div>
@@ -180,9 +204,17 @@ function renderResults(data) {
       <div style="display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;">
   `;
 
+  // Render talents looking for assets/talents/talent-name.png
   data.emblem.talents.forEach(talent => {
+    const talentSlug = slugify(talent);
+    const talentImgPath = `./assets/talents/${talentSlug}.png`;
+
     html += `
-      <span style="background: #1e293b; color: #e2e8f0; border: 1px solid #38bdf8; font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 500;">
+      <span style="background: #1e293b; color: #e2e8f0; border: 1px solid #38bdf8; font-size: 11px; padding: 4px 10px; border-radius: 12px; font-weight: 500; display: inline-flex; align-items: center; gap: 4px;">
+        <img src="${talentImgPath}" 
+             onerror="this.style.display='none';" 
+             style="width: 18px; height: 18px; border-radius: 50%; object-fit: cover;" 
+             alt="" />
         ⚡ ${talent}
       </span>
     `;
