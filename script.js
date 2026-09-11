@@ -209,28 +209,33 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       contents[0].parts.push(optimizedImage);
     }
 
-    const primaryModel = 'gemini-3.6-flash';
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:generateContent?key=${apiKey}`;
+    // Array of fallback models to try sequentially
+    const modelsToTry = ['gemini-3.6-flash', 'gemini-2.5-flash'];
+    let resData = null;
+    let response = null;
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        contents: contents,
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: RESPONSE_SCHEMA,
-          temperature: 0.1,
-          maxOutputTokens: 2500
-        }
-      })
-    });
+    for (const model of modelsToTry) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      
+      response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          contents: contents,
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: RESPONSE_SCHEMA
+          }
+        })
+      });
 
-    const resData = await response.json();
+      resData = await response.json();
+      if (response.ok) break;
+    }
 
-    if (!response.ok) {
-      throw new Error(resData?.error?.message || `API Error ${response.status}`);
+    if (!response || !response.ok) {
+      throw new Error(resData?.error?.message || `API Error ${response?.status}`);
     }
 
     let rawText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
