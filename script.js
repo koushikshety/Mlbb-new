@@ -209,33 +209,39 @@ document.getElementById('analyzeBtn').addEventListener('click', async () => {
       contents[0].parts.push(optimizedImage);
     }
 
-    // Array of fallback models to try sequentially
-    const modelsToTry = ['gemini-3.6-flash', 'gemini-2.5-flash'];
+    // Using supported API models sequentially
+    const modelsToTry = ['gemini-2.5-flash', 'gemini-1.5-flash'];
     let resData = null;
     let response = null;
+    let lastError = null;
 
     for (const model of modelsToTry) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
       
-      response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: contents,
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: RESPONSE_SCHEMA
-          }
-        })
-      });
+      try {
+        response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            contents: contents,
+            generationConfig: {
+              responseMimeType: "application/json",
+              responseSchema: RESPONSE_SCHEMA
+            }
+          })
+        });
 
-      resData = await response.json();
-      if (response.ok) break;
+        resData = await response.json();
+        if (response.ok) break;
+        lastError = resData?.error?.message || `API Error ${response.status}`;
+      } catch (e) {
+        lastError = e.message;
+      }
     }
 
     if (!response || !response.ok) {
-      throw new Error(resData?.error?.message || `API Error ${response?.status}`);
+      throw new Error(lastError || "Failed to reach Gemini API.");
     }
 
     let rawText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
